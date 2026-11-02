@@ -1,0 +1,50 @@
+name: Build FFDownload Intel Mac
+on:
+  push:
+    paths: ['.github/workflows/build-intel.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  intel:
+    runs-on: macos-15-intel
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: gnipbao/FFDownloadManager
+          ref: v0.3.11
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: '1.98.1'
+      - uses: Swatinem/rust-cache@v2
+      - run: npm ci
+      - run: npm run test:web
+      - name: Prepare Intel FFmpeg build
+        run: |
+          test "$(uname -m)" = x86_64
+          sed -i '' 's/--disable-autodetect/--disable-x86asm --disable-autodetect/' scripts/build-ffmpeg-macos.sh
+          sed -i '' 's/Apple Silicon（M 系列芯片）/Intel x86_64/' docs/macos-install.txt
+      - run: sh scripts/build-macos.sh
+      - name: Verify Intel binaries and media merge
+        run: |
+          APP=dist/FFDownload.app/Contents
+          test "$(lipo -archs "$APP/MacOS/ffdownload-desktop")" = x86_64
+          test "$(lipo -archs "$APP/Resources/ffmpeg")" = x86_64
+          "$APP/Resources/ffmpeg" -hide_banner -loglevel error -i tests/fixtures/sample-av.mp4 -map 0:v:0 -map 0:a:0 -c copy -y "$RUNNER_TEMP/remux.mp4"
+          test -s "$RUNNER_TEMP/remux.mp4"
+          cd dist
+          shasum -a 256 *.dmg *.zip > SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FFDownload-0.3.11-macos-x86_64
+          path: |
+            dist/*-macos-x86_64.dmg
+            dist/*-macos-x86_64.zip
+            dist/SHA256SUMS.txt
+          if-no-files-found: error
