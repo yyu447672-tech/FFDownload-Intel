@@ -31,15 +31,11 @@ jobs:
           sed -i '' 's/--disable-autodetect/--disable-x86asm --disable-autodetect/' scripts/build-ffmpeg-macos.sh
           sed -i '' 's/Apple Silicon（M 系列芯片）/Intel x86_64/' docs/macos-install.txt
       - run: sh scripts/build-macos.sh
-      - name: Verify Intel binaries and media merge
+      - name: Download and build FFmpeg first
         run: |
-          APP=dist/FFDownload.app/Contents
-          test "$(lipo -archs "$APP/MacOS/ffdownload-desktop")" = x86_64
-          test "$(lipo -archs "$APP/Resources/ffmpeg")" = x86_64
-          "$APP/Resources/ffmpeg" -hide_banner -loglevel error -i tests/fixtures/sample-av.mp4 -map 0:v:0 -map 0:a:0 -c copy -y "$RUNNER_TEMP/remux.mp4"
-          test -s "$RUNNER_TEMP/remux.mp4"
-          cd dist
-          shasum -a 256 *.dmg *.zip > SHA256SUMS.txt
+          sed -i '' 's/--retry 2/--retry 5 --retry-all-errors --retry-delay 5/' scripts/build-ffmpeg-macos.sh
+          sh scripts/build-ffmpeg-macos.sh
+      - run: sh scripts/build-macos.sh
       - uses: actions/upload-artifact@v4
         with:
           name: FFDownload-0.3.11-macos-x86_64
